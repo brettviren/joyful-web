@@ -27,8 +27,10 @@ def convert(orgfile, format="body"):
     elfile = os.path.join(pkgdir, 'org2%s.el'%format)
     cmd = [emacs, '-Q', '--batch', '-l', elfile, '--eval']
     cmd += ["(org2%s \"%s\" \"%s\")" % (format, orgfile, outfile)]
+    #print 'Calling: %s' % (' '.join(cmd),)
     stderr = subprocess.STDOUT
     subprocess.check_output(cmd, stderr=stderr)
+    #print '...done'
     text = open(outfile).read()
     os.remove(outfile)
     return text

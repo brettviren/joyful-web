@@ -23,8 +23,7 @@ things may be generated.  For example:
  - whatever else one can dream up
 
 The =joy= command line program can be used to process one Org file or
-to aggregate information about many.  As the website gets larger it is
-a good idea to automate the running of =joy= with a build tool such as [[https://waf.io/][Waf]].  
+to aggregate information about many. 
 
 Each Org file can generate various derived files:
 
@@ -41,3 +40,11 @@ The command line interface =joy= can be used to generate your website.
   joy --help
   joy render -o myblogpost.html blogtemplate.html myblogpost.org
 #+END_SRC
+
+* Automation
+
+As the website gets larger it is a good idea to automate the running
+of =joy= with a build tool such as [[https://waf.io/][Waf]].  On example is used in the
+joyful authors web site.  See the [[https://github.com/brettviren/org-pub/blob/master/wscript][wscript]] file.  The basic idea is to
+break out the individual export, revisions and rendering in a
+fine-grained way to let Waf work its magic.
