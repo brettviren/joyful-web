@@ -1,1 +1,2 @@
-joy/org2body.el
+recursive-include joy *.el
+
