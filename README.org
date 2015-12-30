@@ -36,3 +36,8 @@ Each Org file can generate various derived files:
 ** CLI
 
 The command line interface =joy= can be used to generate your website.
+
+#+BEGIN_SRC bash
+  joy --help
+  joy render -o myblogpost.html blogtemplate.html myblogpost.org
+#+END_SRC
