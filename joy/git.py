@@ -4,7 +4,7 @@ import time, datetime
 
 def parse_revisions(revtext):
     "Parse revisions text."
-    ret = list()
+    revs = list()
     for line in revtext.split('\n'):
         line = line.strip()
         if not line or line.startswith("#"):
@@ -12,9 +12,11 @@ def parse_revisions(revtext):
         githash,timestamp = line.split()
         #t = time.gmtime(float(timestamp))
         #dt = datetime.datetime(*t[:6])
-        #ret.append((githash, dt))
-        ret.append((githash, float(timestamp)))
-    return ret;
+        #revs.append((githash, dt))
+        revs.append((githash, float(timestamp)))
+
+    return revs
+
     
 def revisions(filename):
     "Return git revisions for file"

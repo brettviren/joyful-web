@@ -1,0 +1,23 @@
+<html>
+  <head><title> {{ cfg.title }} -- {{ org[0].title }} </title></head>
+  <body>
+    <h1> <b>{{ org[0].title }}</b> -- {{ org[0].subtitle }} </h1>
+
+    {% for item in org[0].headlines %}
+    <li><a href="#sec-{{ item[0] | join('-') }}">{{ item[0] | join('.') }}. {{ item[1] }}</a></li>
+    {% endfor %}
+    </ul>
+
+    <blockquote>{{ meta[0].description }}</blockquote>
+
+    {{ org[0].body }}
+
+    <hr/>
+    <a href="{{ org[0].name }}.org">Org source ({{ org[0].name }}.org)</a>
+<p>
+  Created: {{ meta[0].created }}</br>
+  Revised: {{ meta[0].revised }}</br>
+
+  </body>
+  
+</html>

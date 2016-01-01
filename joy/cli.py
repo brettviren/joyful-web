@@ -1,8 +1,8 @@
 import os.path as osp
 import click
 import json
-import joy.config, joy.io, joy.org, joy.git
-
+import joy.config, joy.io, joy.org, joy.git, joy.render
+import importlib
 
 @click.group()
 @click.option('-c', '--config', 
@@ -37,22 +37,21 @@ def compile(ctx, output, org_path, orgfile):
         cfg['joy compile']['org_path'] = org_path
     org_path = cfg['joy compile']['org_path']
 
+    # fixme: converting to HTML here as "body" is a biased asymmetry
+    # in policy.  How can joy be used to drive Emacs for other
+    # document types?
     doc = dict(
-        orgtext = joy.io.load(orgfile),
-        orghtml = joy.org.convert(orgfile, 'body'),
-        orgtree = json.loads(joy.org.convert(orgfile, 'json')),
+        text = joy.io.load(orgfile),
+        body = joy.org.convert(orgfile, 'body'), 
+        tree = json.loads(joy.org.convert(orgfile, 'json')),
         revs = joy.git.parse_revisions(joy.git.revisions(orgfile)),
     )
 
     # locate source file in various ways
     root = joy.io.subdir_in_path(orgfile, org_path)
-    doc['orgroot'] = root
-    doc['orgabsroot'] = osp.abspath(root)
-    doc['orgsubdir'] = osp.dirname(orgfile)
-    doc['orgfilename'] = osp.basename(orgfile)
-    doc['orgabsfilepath'] = osp.abspath(osp.join(root,orgfile))
-
-    doc['meta'] = joy.org.summarize(doc['orgtree'])
+    doc['root'] = osp.abspath(root)
+    doc['path'] = osp.dirname(orgfile)
+    doc['name'] = osp.splitext(osp.basename(orgfile))[0]
 
     joy.io.save_json(output, doc)
     return    
@@ -61,13 +60,13 @@ def compile(ctx, output, org_path, orgfile):
 @cli.command()
 @click.option('-o', '--output', default="/dev/stdout",
               help="Name the output file.")
-@click.option('-t', '--template-path', envvar="JOY_TEMPLATE_PATH",
+@click.option('-t', '--template-path', 
               multiple=True, type=click.Path(),
               help="Set the path to find templates.")
-@click.argument('template')
+@click.argument('renderer')
 @click.argument('filenames',nargs=-1)
 @click.pass_context
-def render(ctx, output, template_path, template, filenames):
+def render(ctx, output, template_path, renderer, filenames):
     "Render the data in JSON files with the template"
 
     cfg = ctx.obj['cfg']
@@ -77,18 +76,35 @@ def render(ctx, output, template_path, template, filenames):
         cfg['joy render']['template_path'] = template_path
     template_path = cfg['joy render']['template_path']
 
+    # build render config
+    rcfg = cfg.get('global render', dict())
+    rsec = 'render %s' % renderer
+    rcfg.update(cfg.get(rsec, dict()))
+    
+    # load previously compiled org structures
     docs = list()
     for fname in filenames:
         doc = joy.io.load_json(fname)
         docs.append(doc)
 
-    tcfg = cfg.get('global',dict())
-    tsec = 'template %s' % template
-    tcfg.update(cfg.get(tsec, dict()))
+    # call processors
+    dat = dict(org = docs)
+    for pname in rcfg.get('processors',[]).split(','):
+        psec = cfg['processor %s' % pname]
+        modmethname = psec['method']
+        modname, methname = modmethname.rsplit('.',1)
+        mod = importlib.import_module(modname)
+        meth = mod.__dict__[methname]
+        res = meth(dat, **psec)
+        dat[pname] = res
+        
+    # pass any user parameters to template
+    dat['cfg'] = rcfg
 
+    template = rcfg['template']
     env = joy.render.get_env(template_path)
     tmplobj = env.get_template(template)
-    text = tmplobj.render(doc = docs, cfg=tcfg, **docs[0])
+    text = tmplobj.render(**dat)
     joy.io.save(output, text)
     return
 
@@ -103,8 +119,7 @@ def list_formats():
 @click.option('-o', '--output',default="/dev/stdout",
               help="Name the output file.")
 @click.argument('orgfile')
-@click.pass_context
-def export(list_formats, format, output, orgfile):
+def export(format, output, orgfile):
     "Export a single Org file to a supported output format"
     if not format:
         dot = output.rfind('.')+1

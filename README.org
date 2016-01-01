@@ -2,67 +2,153 @@ Joyful Web
 
 * What is this?
 
-The Joyful Web package generates documents from source files written
-in Org markup and rendered with [[http://jinja.pocoo.org/][Jinja2]] templates.
+The Joyful Web package generates documents from source files written in Org markup and rendered with [[http://jinja.pocoo.org/][Jinja2]] templates.
 
-Joyful Web is generic enough to generate arbitrary documents but is
-intended for "static generated" web sites, blogs, RSS feeds, etc.
+Joyful Web is generic enough to generate arbitrary documents but as the name implies it is mainly intended for generating "web sites" of some form.
+
+One example usage: user writes a topic wiki and a dated blog in Org files.  Joyful Web converts these files to HTML organized in a structure of users choosing.  Joyful Web accesses metadata in and about the Org files and generates RSS feeds for recently created and recently updated topics and blog entries.  The Org document keyword =#+TAGS:= is used to generate a "tag cloud".
+
+In the end, the resulting functionality and layout are fully under the user's control.  Joyful Web provides tools for parsing Org files and generating common derived content types.  If some battery is not included Joyful Web provides ways to extend functionality by writing your own Python modules.
 
 * How does it work
 
-Joyful Web generates output in some format (usually HTML) from one or
-more input Org documents.  The process can be thought of as a mapping
-of =N= Org documents to =M= output documents.  The mapping process
-follows two stages:
+Joyful Web processing follows a series of stages.  At the highest level it is a mapping of =N= Org documents to =M= output documents.  In some more detail, the processing flow is diagrammed below:
+
+#+BEGIN_SRC dot :cmd dot :cmdline -Tpng :file highlevel.png :exports results 
+  # note: github's broken Org parser exposes this code block, so ignore it if reading there.
+  digraph "highlevel" {
+          org[label="Org file"];
+          json[label="JSON files"];
+          tmpl[label="user templates"];
+          compile[label="joy compile",shape=box];
+          render[label="joy render",shape=box];
+          procs[label="joy/user \nprocessor modules",shape=septagon];
+          output[label="output"];
+          cfg[label="user configuration"];
+	  gap[style=invis];
+          { rank=same cfg tmpl } -> { rank=same org compile gap render output}[style=invis];
+          { rank=same org compile gap render output} -> { rank=same json procs }[style=invis];
+          org -> compile;
+          render -> output;
+          cfg->compile;
+          cfg->render;
+          tmpl->render;
+	  compile -> json ->render;
+	  render->procs->render;
+  }
+#+END_SRC
+
+#+RESULTS:
+[[file:highlevel.png]]
+
+
+The user provides:
+
+- Org source files.
+- Jinja2 templates written with understanding of Joyful Web data structures.
+- Configuration parameters.
+
+Joyful Web provides:
+
+- A compile mechanism that runs Emacs (and other external programs) on a single Org file in order to produce a more general JSON file.
+- A set of processing modules which produced derived content from the loaded JSON files.
+- A render mechanism which applies the resulting content to the user's Jinja2 template to produce the final output.
 
 ** Compiling
 
-Each individual Org document is /compiled/ into a JSON representation.
-The resulting JSON file includes the original Org text and some
-derived information including;
+Joyful Web's compiling stage runs Emacs and other processes on the Org file in-place in order to produce derived content that can not conveniently be derived directly in Python code or aggregated through Jinja2 templates.  This stage is slow relative to rendering and its results are needed by multiple different renderings.  Thus, the compiled result is written to a file.  The format chosen is JSON as this is easily produced and consumed.
 
-- the HTML =<body>= as exported by Emacs and Org.
-- a representation of the =org-element= tree
-- structures capturing Org document keywords and headlines 
-- Git commit history of the original Org source
+** Compiled data structure
 
-Joyful web can save the JSON text to a file and reload it for the next
-stage of processing.
+The JSON file contains a single dictionary which has the following keys: 
+
+- =text= :: full and original content in Org markup.
+- =body= :: the =<body>= of the HTML export.
+- =tree= :: JSON representation of the file's =org-element= tree (with circular dependencies broken).
+- =name= :: name of file sans directory path and =.org= extension.
+- =root= :: directory root containing the original Org file.
+- =path= :: subdirectory path fragment between =orgroot= and the file.
+- =revs= :: file revisions in the form of a list of pairs of Git commit hash and timestamp (if the file is not in Git then file state information is used). 
+
+This data structure is made available as-is to the template under the =org= dictionary item.  See [[Template data structure]] for more.
 
 ** Rendering
 
-A number of the compiled JSON files are loaded into Joyful Web for the
-process of /rendering/ a single output document.  Rendering is
-accomplished through Jinja2 templates.  The JSON document structures
-are made available, as-is, to the template through the =doc= array
-variable.  For convenience, the keys of the dictionary held in the
-=doc[0]= element are also directly available at top-level.  These keys
-include:
+At the highest level, rendering is a two process:
 
-- =orgtext= :: the original Org text
+1. The compiled data structure from one or more JSON files are loaded.
+2. Processing modules are applied sequentially on this structure to augment it.
+2. A template is applied to the result and a final output file is produced.
 
-- =orghtml= :: the HTML =<body>= text produced by Emacs by exporting the original Org file.
+** Template data structure
 
-- =orgtree= :: the (Jinja2/Python equivalent of the) =org-element= tree.
+Templates must be written with an understanding of the data structure provided to them.  This structure depends on the number of JSON input files given and the processing modules applied.  Thus it is up to the user to coordinate a consistent application of any given template with the proper JSON input files and processing modules.  
 
-- =revs= :: a list of pairs of Git commit hash and associated Unix time stamps ordered newest-first.
+At top level, the data structure is a dictionary.  The element with the key =org= contains an ordered array of data structures loaded from the given JSON files.  Each application of a processing module adds its results to a new top-level dictionary item with the key that of the named processor from the configuration.  Finally, all parameters in the associated render configuration section are placed in a (sub)dictionary held by the key =cfg=.
 
-- =meta= :: A number of metadata parameters extracted from the above for convenience.  For example, =meta.tags= contains the list tags as set by the =TAGS:= Org document keyword.
+** Processors
 
-For example, one might insert the HTML body of the first document with
-a Jinja2 template like:
+A Joyful Web processor is simply a Python function with the following signature:
+
+#+BEGIN_SRC python :eval no
+def process(dat, **kwds):
+    "Document string explaining what this function does"
+    newdat = dict(...)
+    # fill newdat
+    return newdat
+#+END_SRC
+
+The =dat= object is the current template data structure.  It should be treated as read-only by the processor.  The =kwds= are any configuration items the user has bound to the processor in the configuration file.  The returned =newdat= holds the result of the processing and will be attached to the template data structure with a key as determined by user configuration.  More on configuration below.
+
+** Configuration
+
+Joyful Web relies a simple configuration file for the following:
+
+- specify any defaults for =joy= command line arguments.
+- bind configuration parameters and a template to form a rendering.
+
+The configuration file syntax is simple.  It consists of named sections which contain key/value pairs.  The values in the configuration file are expanded for both environment variable and user directory tilde (=~=) references.
+
+Section names are interpreted  as follows:
+
+- =[joy COMMAND]= :: interpreted by =joy COMMAND= to provide defaults for command options as described above.  See =joy COMMAND --help= and discussion above.
+ 
+- =[render NAME]= :: name a rendering by binding a template to a number of named processors and any extra parameters to be passed to the template.
+
+- =[global render]= :: if given, provides default parameters to all renderings.
+
+- =[processor NAME]= :: name a processor by binding a Python module+function and its arguments.
+
+An illustrative [[./example.cfg][example]] configuration:
+
+#+INCLUDE: "example.cfg"
+
+** Templates
+
+While the compilation stage breaks down the Org files into easily used chunks and the processors derive additional chunks it is the templates that build up these parts into a new document of whole cloth.  The cloth is woven with Jinja2 templates.  Users are completely free to author templates as they wish but with understanding of the template data structure described above.  
+
+As described above, the =dat= dictionary is filled with Org-level content as the =org= item, processor results in keys named after each processor and render configuration parameters in the =cfg= item.  These keys are made available to the template.
+
+An illustrative [[./example.html][example]] template file: 
+
+#+INCLUDE: "example.html" html
+
+
+
+* to clean up
+
+Modules can be set on the command line.  For example:
+
+#+BEGIN_SRC bash
+joy render -m joy.modules.rss rss.html myblogentry.json
+#+END_SRC
+
+Multiple modules can be specified by repeating =-m= flags.  Modules can also be given in the template-specific section the configuration file:
 
 #+BEGIN_EXAMPLE
-{{ doc[0].orghtml }}
+[template rss.html]
+module = joy.modules.rss
 #+END_EXAMPLE
-
-Or, because we are interested in the first (maybe only) input document, this can be expressed more succintly like:
-
-#+BEGIN_EXAMPLE
-{{ orghtml }}
-#+END_EXAMPLE
-
-Any keys from subsequent document structures must be accessed explicitly via the =docs[i]= array.
 
 ** Policy
 
@@ -112,7 +198,7 @@ Section names are interpreted as follows:
 - =[template XXX]= :: passed directly to template file =XXX= (if used) as =cfg.<parameter>=.  These merge with and override any parameters that may be provided by =[global]=.
 
 
-#+INCLUDE: "example.cfg"
+
 
 Then one might find in the =blog.html= template file something like:
 

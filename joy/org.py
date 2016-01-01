@@ -94,19 +94,3 @@ def supported_formats():
         fmts.append(fname[4:-3])
     return fmts
 
-class OrgFile(object):
-    'Collection of all there is to know about an Org file'
-
-    def __init__(self, orgfile, jsontext=None, bodytext=None, revstext=None):
-        'Create an OrgFile object'
-        self.orgpath = osp.abspath(orgfile)
-        self.orgfile = osp.basename(orgfile)
-        self.orgtext = open(self.orgpath).read()
-
-        # get JSON representation of Org document
-        if not jsontext:
-            jsontext = convert(self.orgpath, "json")
-        self.orgtree = json.loads(jsontext)
-        self.meta = document_keywords(self.orgtree)
-        self.headlines = headline_structure(self.orgtree)
-
