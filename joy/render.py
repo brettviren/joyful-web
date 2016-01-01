@@ -18,8 +18,12 @@ def get_template_dirs(path, top="/"):
     templates.reverse()
     return templates
 
-def get_env(filename):
+def get_env(template_path):
     "Return the template environment for a given source file"
+    if type(template_path) == type(""):
+        template_path = template_path.split(":")
     from jinja2 import Environment, FileSystemLoader
-    return Environment(loader=FileSystemLoader(get_template_dirs(filename)))
+    return Environment(loader=FileSystemLoader(template_path))
+
+
 
