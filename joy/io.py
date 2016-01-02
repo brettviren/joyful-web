@@ -28,7 +28,16 @@ def subdir_in_path(filepath, path):
     "Return the first entry of <path> which contains filepath"
     if type(path) == type(""):
         path = path.split(":")
+    # check if it is a disembodied reference under a path
     for maybe in path:
         if osp.exists(osp.join(maybe, filepath)):
             return maybe
-    return None
+
+    # check if it is a relative or absolute reference
+    fullpath = osp.abspath(filepath)
+    for maybe in path:
+        if fullpath.startswith(osp.abspath(maybe)):
+            return maybe
+
+    raise RuntimeError, 'Failed to find "%s" in path: %s' % (filepath, ':'.join(path))
+

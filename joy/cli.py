@@ -35,23 +35,29 @@ def compile(ctx, output, org_path, orgfile):
     # joy compile parameters
     if org_path:
         cfg['joy compile']['org_path'] = org_path
-    org_path = cfg['joy compile']['org_path']
+    org_path = cfg['joy compile']['org_path'].split(':')
 
     # fixme: converting to HTML here as "body" is a biased asymmetry
     # in policy.  How can joy be used to drive Emacs for other
     # document types?
     doc = dict(
         text = joy.io.load(orgfile),
+        plain = joy.org.convert(orgfile, 'plain'), 
         body = joy.org.convert(orgfile, 'body'), 
         tree = json.loads(joy.org.convert(orgfile, 'json')),
         revs = joy.git.parse_revisions(joy.git.revisions(orgfile)),
     )
 
     # locate source file in various ways
+    fullpath = osp.abspath(orgfile)
     root = joy.io.subdir_in_path(orgfile, org_path)
-    doc['root'] = osp.abspath(root)
-    doc['path'] = osp.dirname(orgfile)
-    doc['name'] = osp.splitext(osp.basename(orgfile))[0]
+    root = osp.abspath(root)
+    doc['root'] = root
+    relpath = fullpath[len(root)+1:]
+    doc['path'] = osp.dirname(relpath)
+    doc['name'] = osp.splitext(osp.basename(relpath))[0]
+
+    print 'DOC:', doc['root'],doc['path'],doc['name'],relpath
 
     joy.io.save_json(output, doc)
     return    
@@ -77,9 +83,9 @@ def render(ctx, output, template_path, renderer, filenames):
     template_path = cfg['joy render']['template_path']
 
     # build render config
-    rcfg = cfg.get('global render', dict())
+    rcfg = cfg.get('global', dict())
     rsec = 'render %s' % renderer
-    rcfg.update(cfg.get(rsec, dict()))
+    rcfg.update(cfg[rsec])
     
     # load previously compiled org structures
     docs = list()
@@ -89,13 +95,18 @@ def render(ctx, output, template_path, renderer, filenames):
 
     # call processors
     dat = dict(org = docs)
-    for pname in rcfg.get('processors',[]).split(','):
-        psec = cfg['processor %s' % pname]
-        modmethname = psec['method']
+    for pname in rcfg.get('processors','').split(','):
+        pname = pname.strip()
+        if not pname: continue
+        print 'Running processor "%s"' % pname
+        psec = 'processor %s' % pname
+        pcfg = cfg.get('global', dict())
+        pcfg.update(cfg[psec])
+        modmethname = pcfg['method']
         modname, methname = modmethname.rsplit('.',1)
         mod = importlib.import_module(modname)
         meth = mod.__dict__[methname]
-        res = meth(dat, **psec)
+        res = meth(dat, **pcfg)
         dat[pname] = res
         
     # pass any user parameters to template

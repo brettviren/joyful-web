@@ -63,6 +63,7 @@ Joyful Web's compiling stage runs Emacs and other processes on the Org file in-p
 The JSON file contains a single dictionary which has the following keys: 
 
 - =text= :: full and original content in Org markup.
+- =plain= :: document exported to plain text.
 - =body= :: the =<body>= of the HTML export.
 - =tree= :: JSON representation of the file's =org-element= tree (with circular dependencies broken).
 - =name= :: name of file sans directory path and =.org= extension.

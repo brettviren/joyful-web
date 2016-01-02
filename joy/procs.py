@@ -2,24 +2,23 @@ import os
 import joy.org
 import datetime, time
 
+from joy.util import seconds2datetime
+
 def meta(dat, **kwds):
     res = []
     for org in dat['org']:
-        meta = joy.org.summarize(org['tree'])
+        summary = joy.org.summarize(org['tree'])
 
         revs = org['revs']
         if revs:
-            ct = time.gmtime(revs[0][1])
-            meta['created'] = datetime.datetime(*ct[:6])
-            rt = time.gmtime(revs[-1][1])
-            meta['revised'] = datetime.datetime(*rt[:6])
+            ct = revs[0][1]
+            mt = revs[-1][1]
         else:                   # make up something based on file stat
             s = os.stat(os.path.join(org['root'], org['path'], org['name'] + '.org'))
-            ct = time.gmtime(s.st_ctime)
-            meta['created'] = datetime.datetime(*ct[:6])
-            mt = time.gmtime(s.st_mtime)
-            meta['revised'] = datetime.datetime(*mt[:6])
+            ct = s.st_ctime
+            mt = s.st_mtime
 
-
-        res.append(meta)
+        summary['created'] = seconds2datetime(ct)
+        summary['revised'] = seconds2datetime(mt)
+        res.append(summary)
     return res

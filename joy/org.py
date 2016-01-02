@@ -11,6 +11,7 @@ import tempfile
 import subprocess
 import time
 import datetime
+import pytz
 
 # fixme: let this be set by user/config
 emacs = "/usr/bin/emacs"
@@ -44,17 +45,34 @@ def convert(orgfile, format="body"):
 
 def summarize(orgtree, **kwds):
     "Return a dictionary summarizing the orgtree"
-    meta = document_keywords(orgtree)
-    meta['tags'] = meta.get('tags','').split(',')
-    meta['headlines'] = headline_structure(orgtree)
-    return meta
+    kwds = document_keywords(orgtree)
+    kwds['tags'] = kwds.get('tags','').split(',')
+    kwds['headlines'] = headline_structure(orgtree)
+    ts = kwds.get('date',None)
+    if ts:                      # this is painful
+        ts = ts.strip()
+        if ts.startswith('['):
+            ts = ts[1:-1]
+        tt = time.strptime(ts,'%Y-%m-%d %a %H:%M')
+        dt = datetime.datetime(*tt[:6])
+        dt = dt.replace(tzinfo = pytz.timezone('US/Eastern'))
+        kwds['timestamp'] = dt
+
+    return kwds
 
 
 def document_keywords(orgtree):
     'Interpret loaded Org JSON structure and return main section keywords'
-    if orgtree[0] != "org-data": return
+    if len(orgtree) < 3:
+        raise RuntimeError, 'truncated org-tree %s' % str(orgtree)
+
+    if orgtree[0] != "org-data":
+        raise RuntimeError, 'not an org-tree, got "%s"' % orgtree[0]
+
     section = orgtree[2]
-    if section[0] != "section": return
+    if section[0] != "section":
+        return dict()           # no leading section
+
     ret = dict()
     for part in section[2:]:
         if part[0] != "keyword":
